@@ -29,6 +29,7 @@ from matplotlib import image as mp_image
 
 def loadImages(folder, stopAfter10 = False):
     images = []
+    file_ids = []
     n = 0
     for f in os.listdir(folder):
         n=n+1
@@ -37,8 +38,9 @@ def loadImages(folder, stopAfter10 = False):
         fileWithPath = os.path.join(folder, f)
 #        print("Loading image: " + fileWithPath)
         images.append( mp_image.imread(fileWithPath) )
+        file_ids.append(f)
     print("images: len=" + str(len(images))+ ", image shape: " + str(images[0].shape))    
-    return images
+    return images, file_ids
     
 def loadLabelsFromCsvWithHeader(filename):
     reader = csv.DictReader(open(filename),fieldnames=["file_id", "accent"])
@@ -53,7 +55,8 @@ def loadLabelsFromCsvWithHeader(filename):
 
 StopAfter10 = False
 
-loaded_train_images = np.stack( loadImages("data/train", stopAfter10=StopAfter10), axis=0)
+images, file_idsTrain = loadImages("data/train", stopAfter10=StopAfter10)
+loaded_train_images = np.stack( images, axis=0)
 loaded_train_labels = loadLabelsFromCsvWithHeader("data/train_labels.csv")
 if (StopAfter10):
     loaded_train_labels = loaded_train_labels[0:10]
@@ -61,8 +64,8 @@ if (StopAfter10):
 
 train_images = loaded_train_images[:, :, :, 0]
 
-plt.imshow(loaded_train_images[0,:,:,:])
-plt.show()
+#plt.imshow(loaded_train_images[0,:,:,:])
+#plt.show()
 
 
 # In[123]:
@@ -108,7 +111,6 @@ nn = models.Sequential()
 #nn.add(layers.Dense(3, activation = 'softmax'))
 
 nn.add(layers.Conv2D(64, kernel_size=(128, 10), activation='relu', input_shape=(inputSize[1],inputSize[2], 1)))
-nn.add(layers.MaxPooling2D(pool_size=(1, 10)))
 nn.add(layers.Conv2D(32, kernel_size=(1, 10), activation='relu'))
 nn.add(layers.MaxPooling2D(pool_size=(1, 3)))
 #nn.add(layers.Conv2D(32, kernel_size=(3, 3), activation='relu'))
@@ -131,8 +133,19 @@ nr.seed(1025)
 
 # batch size was 128
 history = nn.fit(X_train, Y_train, 
-    epochs = 500, batch_size = 128,
+    epochs = 50, batch_size = 128,
     validation_data = (X_validate, Y_validate))
+
+
+# --- save model and weights
+# https://machinelearningmastery.com/save-load-keras-deep-learning-models/
+# serialize model to JSON
+nn_json = nn.to_json()
+with open("model.json", "w") as json_file:
+    json_file.write(nn_json)
+# serialize weights to HDF5
+nn.save_weights("model.h5")
+print("Saved model to disk")
 
 
 # ## Evaluation
@@ -178,25 +191,22 @@ plot_accuracy(history)
 plt.show()
 
 
-# In[84]:
 
 
-#from keras import metrics
-#predictions = nn.predict(X_validate)
-#matrix = metrics.confusion_matrix(Y_validate.argmax(axis=1), Y_pred.argmax(axis=1))
+images, file_ids = loadImages("data/test", stopAfter10=StopAfter10)
+loaded_test_images = np.stack( images, axis=0)
+test_images = loaded_test_images[:, :, :, 0]
+X_test = test_images.astype('float32')/255
 
+X_test = X_test.reshape((X_test.shape[0],X_test.shape[1],X_test.shape[2],1))
 
-# In[ ]:
+print("Now creating predictions to test data...")
+Y_pred = nn.predict_classes(X_test)
 
+with open('predictions.csv', 'w') as csvfile:
+    filewriter = csv.writer(csvfile, delimiter=',')
+    filewriter.writerow(["file_id", "accent"])
+    for i in range(len(file_ids)):
+        filewriter.writerow([file_ids[i].split(".")[0], Y_pred[i]])
 
-## Evaluating new data
-
-
-# In[ ]:
-
-
-#loaded_test_images = np.stack( loadImages("data/test"), axis=0)
-#test_images = loaded_test_images[:, :, :, 0]
-#X_test = imageSetToArray(test_images)
-#Y_test = ku.to_categorical(np.array(loaded_train_labels))
-
+print("predictions.csv ready")

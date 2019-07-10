@@ -107,14 +107,15 @@ nn = models.Sequential()
 #nn.add(layers.Dense(64, activation = 'relu', input_shape = (inputSize, )))
 #nn.add(layers.Dense(3, activation = 'softmax'))
 
-nn.add(layers.Conv2D(64, kernel_size=(128, 1), activation='relu', input_shape=(inputSize[1],inputSize[2], 1)))
+nn.add(layers.Conv2D(64, kernel_size=(128, 10), activation='relu', input_shape=(inputSize[1],inputSize[2], 1)))
+nn.add(layers.MaxPooling2D(pool_size=(1, 10)))
+nn.add(layers.Conv2D(32, kernel_size=(1, 10), activation='relu'))
 nn.add(layers.MaxPooling2D(pool_size=(1, 3)))
-nn.add(layers.Conv2D(32, kernel_size=(1, 5), activation='relu'))
-nn.add(layers.MaxPooling2D(pool_size=(1, 5)))
 #nn.add(layers.Conv2D(32, kernel_size=(3, 3), activation='relu'))
 nn.add(layers.Flatten())
+nn.add(layers.Dense(64, activation = 'relu', kernel_regularizer=regularizers.l2(0.01)))
 nn.add(layers.Dense(32, activation = 'relu', kernel_regularizer=regularizers.l2(0.01)))
-nn.add(layers.Dropout(0.5))
+#nn.add(layers.Dropout(0.5))
 nn.add(layers.Dense(3, activation = 'softmax'))
 
 nn.summary()
@@ -130,7 +131,7 @@ nr.seed(1025)
 
 # batch size was 128
 history = nn.fit(X_train, Y_train, 
-    epochs = 50, batch_size = 64,
+    epochs = 500, batch_size = 128,
     validation_data = (X_validate, Y_validate))
 
 

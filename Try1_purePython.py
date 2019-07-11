@@ -2,76 +2,70 @@
 # coding: utf-8
 
 # # My capstone project for MPP AI
-
-# In[1]:
-
-
 import keras.utils.np_utils as ku
 import keras.models as models
 import keras.layers as layers
 from keras import regularizers
 from keras.optimizers import rmsprop
+from matplotlib import image as mp_image
 import numpy as np
-import numpy.random as nr
-import matplotlib.pyplot as plt
-#get_ipython().magic(u'matplotlib inline')
-
-
-# ## Initializing and loading
-
-# In[ ]:
-
-
 import os
 import csv
-from matplotlib import image as mp_image
+import numpy.random as nr
+import matplotlib.pyplot as plt
+import keras
+from sklearn.model_selection import train_test_split
 #get_ipython().magic(u'matplotlib inline')
 
-def loadImages(folder, stopAfter10 = False):
+def loadImages(folder, stopAfterN = 0):
     images = []
     file_ids = []
     n = 0
     for f in os.listdir(folder):
         n=n+1
-        if (n>10 and stopAfter10):
+        if (n>stopAfterN and stopAfterN>0):
             break
         fileWithPath = os.path.join(folder, f)
-#        print("Loading image: " + fileWithPath)
         images.append( mp_image.imread(fileWithPath) )
-        file_ids.append(f)
+        file_ids.append(f.split(".")[0])
     print("images: len=" + str(len(images))+ ", image shape: " + str(images[0].shape))    
     return images, file_ids
     
 def loadLabelsFromCsvWithHeader(filename):
     reader = csv.DictReader(open(filename),fieldnames=["file_id", "accent"])
     labels = []
+    file_ids = []
     isFirst = True
     for row in reader:
         if (isFirst):
             isFirst = False
         else:
             labels.append(row["accent"])
-    return labels
+            file_ids.append(row["file_id"])
+    return labels, file_ids
 
-StopAfter10 = False
+StopAfterN = 0
 
-images, file_idsTrain = loadImages("data/train", stopAfter10=StopAfter10)
+images, images_file_ids = loadImages("data/train", stopAfterN=StopAfterN)
 loaded_train_images = np.stack( images, axis=0)
-loaded_train_labels = loadLabelsFromCsvWithHeader("data/train_labels.csv")
-if (StopAfter10):
-    loaded_train_labels = loaded_train_labels[0:10]
-    print("WARNING! ONLY 10 IMAGES WERE LOADED!")
+loaded_train_labels, label_file_ids = loadLabelsFromCsvWithHeader("data/train_labels.csv")
+if (StopAfterN>0):
+    loaded_train_labels = loaded_train_labels[0:StopAfterN]
+    label_file_ids = label_file_ids[0:StopAfterN]
+    print("WARNING! ONLY "+str(StopAfterN)+" IMAGES WERE LOADED!")
+
+if (len(images_file_ids) != len(label_file_ids)):
+    print("ERROR: IMAGE AND LABEL LIST LENGTH DOES NOT MATCH!")
+
+for i in range(len(images_file_ids)):
+    if (images_file_ids[i] != label_file_ids[i]):
+        print("ERROR: FILE_ID MISMATCH!!!")
 
 train_images = loaded_train_images[:, :, :, 0]
 
 #plt.imshow(loaded_train_images[0,:,:,:])
 #plt.show()
 
-
-# In[123]:
-
-
-from sklearn.model_selection import train_test_split
 
 X = train_images.astype('float32')/255
 Y = ku.to_categorical(np.array(loaded_train_labels)) # Make one-hot encoded numpy array
@@ -92,23 +86,12 @@ print("Y_validate: " + str(Y_validate.shape))
 print(Y_train)
 
 
-# ## Data preprocessing
-
-# In[124]:
-
-X_train.shape
-
-# ## Creating the DNN
-
-# In[125]:
 
 
 inputSize = X_train.shape
 print(inputSize)
 
 nn = models.Sequential()
-#nn.add(layers.Dense(64, activation = 'relu', input_shape = (inputSize, )))
-#nn.add(layers.Dense(3, activation = 'softmax'))
 
 nn.add(layers.Conv2D(128, kernel_size=(128, 10), activation='relu', input_shape=(inputSize[1],inputSize[2], 1)))
 nn.add(layers.MaxPooling2D(pool_size=(1, 2)))
@@ -126,16 +109,25 @@ nn.compile(optimizer = 'rmsprop', loss = 'categorical_crossentropy', metrics = [
 
 # ## Training the network, saving history
 
-# In[126]:
-
+checkpointfilename = "earlystopcheckpoint.hdf5"
+callbacks_list = [
+    keras.callbacks.EarlyStopping(
+        monitor = 'val_loss', # Use accuracy to monitor the model
+        patience = 100 # Stop after N steps with lower accuracy
+    ),
+    keras.callbacks.ModelCheckpoint(
+        filepath = checkpointfilename, # file where the checkpoint is saved
+        monitor = 'val_loss', # Don't overwrite the saved model unless val_loss is worse
+        save_best_only = True # Only save model if it is the best
+    )
+]
 
 nr.seed(1025)
 
 # batch size was 128
 history = nn.fit(X_train, Y_train, 
-    epochs = 1000, batch_size = 128,
-    validation_data = (X_validate, Y_validate))
-
+    epochs = 500, batch_size = 128,
+    validation_data = (X_validate, Y_validate), callbacks=callbacks_list)
 
 # --- save model and weights
 # https://machinelearningmastery.com/save-load-keras-deep-learning-models/
@@ -149,7 +141,7 @@ print("Saved model to disk")
 
 # ----------------- run predictions
 
-images, file_ids = loadImages("data/test", stopAfter10=StopAfter10)
+images, file_ids = loadImages("data/test", stopAfterN=StopAfterN)
 loaded_test_images = np.stack( images, axis=0)
 test_images = loaded_test_images[:, :, :, 0]
 X_test = test_images.astype('float32')/255
@@ -173,7 +165,8 @@ print("predictions.csv ready")
 # Estimating accuracy
 # Checking confusion matrix
 
-# In[127]:
+if (StopAfterN>0):
+    print("WARNING! ONLY "+str(StopAfterN)+" IMAGES WERE LOADED (for train and for predictionas well)!")
 
 
 # Using the validation set, we do not need "nn.evaluate(test_images, test_labels)"...

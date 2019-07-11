@@ -110,12 +110,12 @@ nn = models.Sequential()
 #nn.add(layers.Dense(64, activation = 'relu', input_shape = (inputSize, )))
 #nn.add(layers.Dense(3, activation = 'softmax'))
 
-nn.add(layers.Conv2D(64, kernel_size=(128, 10), activation='relu', input_shape=(inputSize[1],inputSize[2], 1)))
-nn.add(layers.Conv2D(32, kernel_size=(1, 10), activation='relu'))
-nn.add(layers.MaxPooling2D(pool_size=(1, 3)))
+nn.add(layers.Conv2D(128, kernel_size=(128, 10), activation='relu', input_shape=(inputSize[1],inputSize[2], 1)))
+nn.add(layers.MaxPooling2D(pool_size=(1, 2)))
+nn.add(layers.Conv2D(64, kernel_size=(1, 10), activation='relu'))
+nn.add(layers.MaxPooling2D(pool_size=(1, 2)))
 #nn.add(layers.Conv2D(32, kernel_size=(3, 3), activation='relu'))
 nn.add(layers.Flatten())
-nn.add(layers.Dense(64, activation = 'relu', kernel_regularizer=regularizers.l2(0.01)))
 nn.add(layers.Dense(32, activation = 'relu', kernel_regularizer=regularizers.l2(0.01)))
 #nn.add(layers.Dropout(0.5))
 nn.add(layers.Dense(3, activation = 'softmax'))
@@ -133,7 +133,7 @@ nr.seed(1025)
 
 # batch size was 128
 history = nn.fit(X_train, Y_train, 
-    epochs = 50, batch_size = 128,
+    epochs = 1000, batch_size = 128,
     validation_data = (X_validate, Y_validate))
 
 
@@ -147,8 +147,28 @@ with open("model.json", "w") as json_file:
 nn.save_weights("model.h5")
 print("Saved model to disk")
 
+# ----------------- run predictions
 
-# ## Evaluation
+images, file_ids = loadImages("data/test", stopAfter10=StopAfter10)
+loaded_test_images = np.stack( images, axis=0)
+test_images = loaded_test_images[:, :, :, 0]
+X_test = test_images.astype('float32')/255
+
+X_test = X_test.reshape((X_test.shape[0],X_test.shape[1],X_test.shape[2],1))
+
+print("Now creating predictions to test data...")
+Y_pred = nn.predict_classes(X_test)
+
+with open('predictions.csv', 'w') as csvfile:
+    filewriter = csv.writer(csvfile, delimiter=',')
+    filewriter.writerow(["file_id", "accent"])
+    for i in range(len(file_ids)):
+        filewriter.writerow([file_ids[i].split(".")[0], Y_pred[i]])
+
+print("predictions.csv ready")
+
+
+# -------------  Evaluation
 # Visualization of the history, checking for overfitting...
 # Estimating accuracy
 # Checking confusion matrix
@@ -191,22 +211,3 @@ plot_accuracy(history)
 plt.show()
 
 
-
-
-images, file_ids = loadImages("data/test", stopAfter10=StopAfter10)
-loaded_test_images = np.stack( images, axis=0)
-test_images = loaded_test_images[:, :, :, 0]
-X_test = test_images.astype('float32')/255
-
-X_test = X_test.reshape((X_test.shape[0],X_test.shape[1],X_test.shape[2],1))
-
-print("Now creating predictions to test data...")
-Y_pred = nn.predict_classes(X_test)
-
-with open('predictions.csv', 'w') as csvfile:
-    filewriter = csv.writer(csvfile, delimiter=',')
-    filewriter.writerow(["file_id", "accent"])
-    for i in range(len(file_ids)):
-        filewriter.writerow([file_ids[i].split(".")[0], Y_pred[i]])
-
-print("predictions.csv ready")
